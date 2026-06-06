@@ -1,0 +1,280 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(uuid())
+  username        String    @unique
+  email           String    @unique
+  passwordHash    String
+  role            String
+  supplierId      String?
+  supplier        Supplier? @relation(fields: [supplierId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastLoginAt     DateTime?
+  
+  createdProcurements ProcurementRequest[] @relation("Creator")
+  approvalRecords     ApprovalRecord[]
+  
+  auditLogs       AuditLog[]
+  
+  @@index([role])
+  @@index([supplierId])
+}
+
+model Supplier {
+  id               String    @id @default(uuid())
+  name             String
+  contactName      String
+  contactPhone     String
+  contactEmail     String
+  address          String?
+  qualifications   String
+  level            String
+  performanceScore Float     @default(0)
+  status           String    @default("ACTIVE")
+  categories       String
+  historicalScores String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  
+  users            User[]
+  bids             Bid[]
+  evaluationResults EvaluationResult[]
+  contracts        Contract[]
+  invitedProcurements ProcurementRequest[] @relation("InvitedSuppliers")
+  
+  @@index([level, status])
+  @@index([performanceScore])
+}
+
+model ProcurementRequest {
+  id                     String    @id @default(uuid())
+  title                  String
+  description            String
+  category               String
+  quantity               Float
+  unit                   String
+  budget                 Decimal
+  startPrice             Decimal
+  requiredQualifications String
+  minSupplierLevel       String
+  deadline               DateTime
+  maxRounds              Int       @default(5)
+  minPriceDrop           Float     @default(0.02)
+  status                 String    @default("DRAFT")
+  totalSavings           Decimal?
+  
+  createdBy              String
+  creator                User      @relation("Creator", fields: [createdBy], references: [id])
+  
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  publishedAt            DateTime?
+  biddingEndedAt         DateTime?
+  awardedAt              DateTime?
+  
+  currentRoundNumber     Int       @default(0)
+  consecutiveNoBidRounds Int       @default(0)
+  
+  invitedSuppliers       Supplier[] @relation("InvitedSuppliers")
+  biddingRounds          BiddingRound[]
+  bids                   Bid[]
+  evaluationResults      EvaluationResult[]
+  approvalRecords        ApprovalRecord[]
+  contract               Contract?
+  
+  @@index([status, createdAt])
+  @@index([category, status])
+  @@index([createdBy, createdAt])
+}
+
+model BiddingRound {
+  id             String              @id @default(uuid())
+  procurementId  String
+  procurement    ProcurementRequest  @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  roundNumber    Int
+  startTime      DateTime
+  endTime        DateTime
+  status         String              @default("PENDING")
+  lowestPrice    Decimal?
+  bidCount       Int                 @default(0)
+  
+  bids           Bid[]
+  
+  @@index([procurementId, roundNumber])
+  @@index([status, endTime])
+  @@unique([procurementId, roundNumber])
+}
+
+model Bid {
+  id               String              @id @default(uuid())
+  procurementId    String
+  procurement      ProcurementRequest  @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  roundId          String
+  round            BiddingRound        @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  supplierId       String
+  supplier         Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  price            Decimal
+  timestamp        DateTime            @default(now())
+  status           String              @default("VALID")
+  rank             Int?
+  anonymousName    String
+  priceDropPercent Float?
+  
+  @@index([procurementId, roundId, status])
+  @@index([supplierId, procurementId])
+  @@index([price])
+  @@unique([procurementId, roundId, supplierId])
+}
+
+model EvaluationResult {
+  id              String              @id @default(uuid())
+  procurementId   String
+  procurement     ProcurementRequest  @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  supplierId      String
+  supplier        Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  finalPrice      Decimal
+  priceScore      Float
+  historyScore    Float
+  totalScore      Float
+  rank            Int
+  isRecommended   Boolean
+  evaluatedAt     DateTime            @default(now())
+  
+  @@index([procurementId, rank])
+  @@index([supplierId, evaluatedAt])
+}
+
+model ApprovalRecord {
+  id                String              @id @default(uuid())
+  procurementId     String
+  procurement       ProcurementRequest  @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  approverId        String
+  approver          User                @relation(fields: [approverId], references: [id], onDelete: Cascade)
+  approverRole      String
+  requiredRole      String
+  budgetOverrun     Float
+  decision          String?
+  comment           String?
+  decidedAt         DateTime?
+  createdAt         DateTime            @default(now())
+  
+  @@index([procurementId, createdAt])
+  @@index([approverId, decision])
+}
+
+model Contract {
+  id               String              @id @default(uuid())
+  procurementId    String              @unique
+  procurement      ProcurementRequest  @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  supplierId       String
+  supplier         Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  amount           Decimal
+  status           String              @default("DRAFT")
+  content          String
+  signedByBuyer    String?
+  signedBySupplier String?
+  signedAt         DateTime?
+  startDate        DateTime?
+  endDate          DateTime?
+  
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  
+  fulfillments     FulfillmentRecord[]
+  
+  @@index([supplierId, status])
+  @@index([status, createdAt])
+}
+
+model FulfillmentRecord {
+  id                  String     @id @default(uuid())
+  contractId          String
+  contract            Contract   @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  receiptNo           String
+  deliveredQuantity   Float
+  acceptedQuantity    Float
+  qualityScore        Float
+  deliveryDate        DateTime
+  performanceDelta    Float
+  inspectionReport    String?
+  createdAt           DateTime   @default(now())
+  
+  @@index([contractId, deliveryDate])
+  @@index([deliveryDate])
+}
+
+model Inventory {
+  id               String   @id @default(uuid())
+  productName      String
+  productCode      String   @unique
+  category         String
+  quantity         Float
+  unit             String
+  safetyStockLevel Float
+  lastUpdatedAt    DateTime @default(now())
+  
+  @@index([productCode])
+  @@index([category])
+}
+
+model AuditLog {
+  id         String         @id @default(uuid())
+  userId     String?
+  user       User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  resource   String
+  resourceId String
+  details    String?
+  ipAddress  String?
+  userAgent  String?
+  level      String         @default("INFO")
+  timestamp  DateTime       @default(now())
+  
+  @@index([timestamp])
+  @@index([userId, action])
+  @@index([resource, resourceId])
+  @@index([level, timestamp])
+}
+
+model Notification {
+  id           String   @id @default(uuid())
+  type         String
+  title        String
+  content      String
+  recipients   String
+  channels     String
+  status       String   @default("PENDING")
+  sentAt       DateTime?
+  errorMessage String?
+  createdAt    DateTime @default(now())
+  
+  @@index([status, createdAt])
+}
+
+model MonthlyReport {
+  id                String   @id @default(uuid())
+  month             String   @unique
+  totalProjects     Int
+  avgPriceDrop      Float
+  awardDeviationRate Float
+  totalSavings      Decimal
+  comparisonData    String
+  generatedAt       DateTime @default(now())
+  filePath          String?
+  
+  @@index([month])
+}
