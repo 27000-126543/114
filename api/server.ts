@@ -55,8 +55,6 @@ biddingEngineService.setSocketIO(io);
 
 biddingEngineService.initializeActiveBiddings();
 
-auditLogService.startBatchWriter();
-
 cron.schedule('0 0 1 * *', async () => {
   try {
     console.log('Starting monthly report generation...');
@@ -81,7 +79,6 @@ cron.schedule('0 0 1 * *', async () => {
     );
   }
 }, {
-  scheduled: true,
   timezone: 'Asia/Shanghai',
 });
 
@@ -93,7 +90,7 @@ server.listen(PORT, () => {
 process.on('SIGTERM', () => {
   console.log('SIGTERM signal received');
   biddingEngineService.shutdown();
-  auditLogService.stopBatchWriter();
+  auditLogService.shutdown();
   server.close(() => {
     console.log('Server closed');
     process.exit(0);
@@ -103,7 +100,7 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('SIGINT signal received');
   biddingEngineService.shutdown();
-  auditLogService.stopBatchWriter();
+  auditLogService.shutdown();
   server.close(() => {
     console.log('Server closed');
     process.exit(0);

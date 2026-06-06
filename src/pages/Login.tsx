@@ -52,9 +52,24 @@ const Login = () => {
     }
   };
 
-  const quickLogin = (user: string) => {
+  const quickLogin = async (user: string) => {
     setUsername(user);
     setPassword('123456');
+    clearError();
+    
+    try {
+      await login(user, '123456');
+      
+      if (rememberMe) {
+        localStorage.setItem('rememberedUsername', user);
+      } else {
+        localStorage.removeItem('rememberedUsername');
+      }
+      
+      navigate(from, { replace: true });
+    } catch (err) {
+      // Error is handled by the store
+    }
   };
 
   return (
